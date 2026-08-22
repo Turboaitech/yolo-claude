@@ -1,0 +1,11 @@
+# Source artwork used only to regenerate the icon
+*.png
+!docs/*.png
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
