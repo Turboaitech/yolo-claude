@@ -41,11 +41,11 @@ function Write-Err($m)  { Write-Host "    [x]  $m" -ForegroundColor Red }
 # ordinary terminals. That is what breaks naively-created shortcuts.
 # --------------------------------------------------------------------------
 function Test-InAppContainer {
-    $marker = Join-Path $env:APPDATA ".yolo-bash-probe-$PID"
+    $marker = Join-Path $env:APPDATA ".yolo-claude-probe-$PID"
     try { Set-Content -LiteralPath $marker -Value 'probe' -ErrorAction Stop } catch { return $false }
     try {
         $hit = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Packages') -Directory -ErrorAction SilentlyContinue |
-            ForEach-Object { Join-Path $_.FullName "LocalCache\Roaming\.yolo-bash-probe-$PID" } |
+            ForEach-Object { Join-Path $_.FullName "LocalCache\Roaming\.yolo-claude-probe-$PID" } |
             Where-Object { Test-Path -LiteralPath $_ } |
             Select-Object -First 1
         return [bool]$hit
@@ -95,8 +95,8 @@ function Find-ContainerClaude {
 # --------------------------------------------------------------------------
 
 Write-Host ''
-Write-Host 'yolo-bash installer' -ForegroundColor White
-Write-Host '-------------------'
+Write-Host 'yolo-claude installer' -ForegroundColor White
+Write-Host '---------------------'
 
 $inContainer = Test-InAppContainer
 if ($inContainer) {

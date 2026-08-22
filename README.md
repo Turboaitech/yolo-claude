@@ -1,4 +1,4 @@
-# yolo-bash
+# yolo-claude
 
 A Windows desktop shortcut that launches Claude Code in "YOLO" mode — permission
 prompts disabled.
@@ -12,8 +12,8 @@ prompts disabled.
 From a **normal PowerShell window** (see [the container gotcha](#the-container-gotcha)):
 
 ```powershell
-git clone https://github.com/Turboaitech/yolo-bash.git
-cd yolo-bash
+git clone https://github.com/Turboaitech/yolo-claude.git
+cd yolo-claude
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
