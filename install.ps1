@@ -22,6 +22,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Drawing
 
 $BinDir  = Join-Path $env:USERPROFILE '.local\bin'
 $Desktop = [Environment]::GetFolderPath('Desktop')
@@ -93,6 +94,120 @@ function Find-ContainerClaude {
 }
 
 # --------------------------------------------------------------------------
+# Icon
+#
+# claude.exe embeds the logo, but only at 32x32, so the shortcut looks soft at
+# large icon sizes. If the Claude desktop app is installed, its package ships a
+# 300x300 logo we can rebuild into a proper multi-resolution .ico. The .ico is
+# written next to claude.exe so the shortcut does not depend on the versioned
+# WindowsApps path, which changes on every app update.
+# --------------------------------------------------------------------------
+function Find-LogoSource {
+    $roots = @()
+    try {
+        $pkg = Get-AppxPackage -Name 'Claude' -ErrorAction SilentlyContinue
+        if ($pkg) { $roots += $pkg.InstallLocation }
+    } catch { }
+    $roots += Get-ChildItem (Join-Path $env:ProgramFiles 'WindowsApps') -Directory -Filter 'Claude_*' -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty FullName
+
+    foreach ($root in ($roots | Where-Object { $_ } | Select-Object -Unique)) {
+        $assets = Join-Path $root 'assets'
+        $best = $null; $bestPx = 0
+        Get-ChildItem $assets -Filter 'Square*Logo*.png' -ErrorAction SilentlyContinue | ForEach-Object {
+            try {
+                $img = [System.Drawing.Image]::FromFile($_.FullName)
+                $px = [math]::Min($img.Width, $img.Height)
+                $img.Dispose()
+                if ($px -gt $bestPx) { $bestPx = $px; $best = $_.FullName }
+            } catch { }
+        }
+        if ($best -and $bestPx -ge 128) { return $best }
+    }
+    return $null
+}
+
+function New-IcoFile {
+    param(
+        [Parameter(Mandatory)][string]$SourceImage,
+        [Parameter(Mandatory)][string]$Destination,
+        [int[]]$Sizes = @(16, 24, 32, 48, 64, 128, 256)
+    )
+
+    $src = [System.Drawing.Image]::FromFile($SourceImage)
+    try {
+        $frames = @()
+        foreach ($size in $Sizes) {
+            $bmp = New-Object System.Drawing.Bitmap($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.InterpolationMode    = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+            $g.PixelOffsetMode      = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+            $g.SmoothingMode        = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+            $g.CompositingQuality   = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
+            $g.Clear([System.Drawing.Color]::Transparent)
+            $g.DrawImage($src, (New-Object System.Drawing.Rectangle(0, 0, $size, $size)))
+            $g.Dispose()
+
+            # 32bpp BGRA, stored bottom-up
+            $rect = New-Object System.Drawing.Rectangle(0, 0, $size, $size)
+            $data = $bmp.LockBits($rect, [System.Drawing.Imaging.ImageLockMode]::ReadOnly, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+            $stride = $size * 4
+            $pixels = New-Object byte[] ($stride * $size)
+            for ($y = 0; $y -lt $size; $y++) {
+                $srcRow = [IntPtr]::Add($data.Scan0, $y * $data.Stride)
+                [System.Runtime.InteropServices.Marshal]::Copy($srcRow, $pixels, ($size - 1 - $y) * $stride, $stride)
+            }
+            $bmp.UnlockBits($data)
+            $bmp.Dispose()
+
+            # 1bpp AND mask, rows padded to 4 bytes; all zero, the alpha channel does the work
+            $maskStride = [math]::Ceiling($size / 32) * 4
+            $mask = New-Object byte[] ($maskStride * $size)
+
+            $ms = New-Object System.IO.MemoryStream
+            $bw = New-Object System.IO.BinaryWriter($ms)
+            # BITMAPINFOHEADER
+            $bw.Write([uint32]40)
+            $bw.Write([int32]$size)
+            $bw.Write([int32]($size * 2))   # height doubled: XOR image + AND mask
+            $bw.Write([uint16]1)
+            $bw.Write([uint16]32)
+            $bw.Write([uint32]0)            # BI_RGB
+            $bw.Write([uint32]($pixels.Length + $mask.Length))
+            $bw.Write([int32]0); $bw.Write([int32]0)
+            $bw.Write([uint32]0); $bw.Write([uint32]0)
+            $bw.Write($pixels)
+            $bw.Write($mask)
+            $bw.Flush()
+
+            $frames += [pscustomobject]@{ Size = $size; Bytes = $ms.ToArray() }
+            $bw.Dispose(); $ms.Dispose()
+        }
+
+        $out = New-Object System.IO.MemoryStream
+        $w = New-Object System.IO.BinaryWriter($out)
+        # ICONDIR
+        $w.Write([uint16]0); $w.Write([uint16]1); $w.Write([uint16]$frames.Count)
+        $offset = 6 + (16 * $frames.Count)
+        foreach ($f in $frames) {
+            $dim = if ($f.Size -ge 256) { 0 } else { $f.Size }   # 0 means 256 in the ICO format
+            $w.Write([byte]$dim); $w.Write([byte]$dim)
+            $w.Write([byte]0); $w.Write([byte]0)
+            $w.Write([uint16]1); $w.Write([uint16]32)
+            $w.Write([uint32]$f.Bytes.Length)
+            $w.Write([uint32]$offset)
+            $offset += $f.Bytes.Length
+        }
+        foreach ($f in $frames) { $w.Write($f.Bytes) }
+        $w.Flush()
+        [System.IO.File]::WriteAllBytes($Destination, $out.ToArray())
+        $w.Dispose(); $out.Dispose()
+    } finally {
+        $src.Dispose()
+    }
+}
+
+# --------------------------------------------------------------------------
 
 Write-Host ''
 Write-Host 'yolo-claude installer' -ForegroundColor White
@@ -156,6 +271,27 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Ok "verified: $ver"
 
+Write-Step 'Preparing icon'
+$icoPath = Join-Path $BinDir 'claude.ico'
+$iconLocation = "$claude,0"
+if ((Test-Path -LiteralPath $icoPath) -and -not $Force) {
+    $iconLocation = "$icoPath,0"
+    Write-Ok "already built: $icoPath"
+} else {
+    $logo = Find-LogoSource
+    if ($logo) {
+        try {
+            New-IcoFile -SourceImage $logo -Destination $icoPath
+            $iconLocation = "$icoPath,0"
+            Write-Ok "built $icoPath from $(Split-Path -Leaf $logo)"
+        } catch {
+            Write-Warn "icon build failed ($($_.Exception.Message)); using the icon inside claude.exe"
+        }
+    } else {
+        Write-Warn 'Claude desktop app not found; using the 32x32 icon inside claude.exe'
+    }
+}
+
 Write-Step "Creating shortcut on $Desktop"
 $lnk = Join-Path $Desktop 'Claude Code.lnk'
 $shell = New-Object -ComObject WScript.Shell
@@ -163,7 +299,7 @@ $sc = $shell.CreateShortcut($lnk)
 $sc.TargetPath       = $claude
 $sc.Arguments        = '--dangerously-skip-permissions'
 $sc.WorkingDirectory = $env:USERPROFILE
-$sc.IconLocation     = "$claude,0"
+$sc.IconLocation     = $iconLocation
 $sc.Description      = 'Launch Claude Code in YOLO mode (skip permission prompts)'
 $sc.WindowStyle      = 1
 $sc.Save()

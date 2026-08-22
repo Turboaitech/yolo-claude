@@ -23,9 +23,10 @@ The installer:
    on disk if it finds one, and only downloading the native installer as a last
    resort.
 2. Puts it in `%USERPROFILE%\.local\bin`.
-3. Generates `Claude Code.lnk` on your Desktop with the correct absolute path for
+3. Builds a proper multi-resolution `claude.ico` (16 → 256 px) for the shortcut.
+4. Generates `Claude Code.lnk` on your Desktop with the correct absolute path for
    *your* machine, pointing straight at `claude.exe`.
-4. Adds `%USERPROFILE%\.local\bin` to your user PATH.
+5. Adds `%USERPROFILE%\.local\bin` to your user PATH.
 
 Flags: `-SkipPathUpdate` leaves PATH alone, `-Force` re-copies `claude.exe` even if
 one is already installed.
@@ -70,6 +71,22 @@ schtasks /run /tn Probe
 
 `install.ps1` detects the container, warns, and installs to `%USERPROFILE%\.local\bin`,
 which is **not** virtualized.
+
+## The icon
+
+`claude.exe` embeds the Claude logo, but only at 32×32 — fine in the taskbar, soft
+at large desktop icon sizes. If the Claude desktop app is installed, the installer
+finds the 300×300 logo in its MSIX package and rebuilds it into a real
+multi-resolution `.ico` (16, 24, 32, 48, 64, 128, 256 px, 32-bit with alpha),
+written to `%USERPROFILE%\.local\bin\claude.ico`.
+
+Nothing is committed to this repo — the icon is generated on *your* machine at
+install time. It's written next to `claude.exe` rather than referenced in place
+because the `WindowsApps` path carries a version number that changes on every app
+update, which would silently break the shortcut's icon.
+
+If the desktop app isn't installed, the shortcut falls back to the 32×32 icon
+inside `claude.exe`.
 
 ## Notes
 
