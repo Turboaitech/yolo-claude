@@ -1,41 +1,80 @@
 # yolo-bash
 
-Windows desktop shortcuts that launch AI coding CLIs in "YOLO" mode — permission
-prompts and approval gates disabled.
+A Windows desktop shortcut that launches Claude Code in "YOLO" mode — permission
+prompts disabled.
 
-> **Warning:** every shortcut here intentionally bypasses the safety confirmations
-> of its tool. Only use them in environments where you accept that.
-
-## `shortcuts/`
-
-| Shortcut | Launches | Flags |
-| --- | --- | --- |
-| `Claude Code.lnk` | `wscript` → `scripts/claude-launch.vbs` → `claude.cmd` | `--dangerously-skip-permissions` |
-| `Qwen 3.8 Claude Code.lnk` | `wscript` → `scripts/qwen38-claude-launch.vbs` → `scripts/qwen38-claude-code.cmd` | Claude Code pointed at local Ollama, `--dangerously-skip-permissions` |
-| `Codex.lnk` | `cmd /d /k codex.cmd` | `--dangerously-bypass-approvals-and-sandbox` |
-
-The `.lnk` files are Windows binaries with absolute paths baked in. They assume:
-
-- `C:\Users\boisg\` as the home / working directory
-- Node installed via nvm4w at `C:\nvm4w\nodejs\` (`claude.cmd`, `codex.cmd`)
-- the `.vbs` / `.cmd` files from `scripts/` sitting in `C:\Users\boisg\`
-
-On a different machine, re-create the shortcuts rather than copying them, or edit
-their targets to match your paths.
-
-## `scripts/`
-
-- `claude-launch.vbs` — one-liner that opens a `cmd /k` window running Claude Code.
-  The VBS wrapper exists so the shortcut spawns a real console without a stray
-  parent window.
-- `qwen38-claude-launch.vbs` — same trick, but runs `qwen38-claude-code.cmd`.
-- `qwen38-claude-code.cmd` — points Claude Code at a **local** model:
-  - `ANTHROPIC_BASE_URL=http://127.0.0.1:11434` (Ollama), auth token `ollama`
-  - clears `ANTHROPIC_API_KEY` so nothing leaks to the real API
-  - `MAX_THINKING_TOKENS=0` plus telemetry/error-reporting off
-  - starts `ollama serve` if `/api/version` doesn't answer within 3s
-  - runs `--model qwen3.8-claude-nothink --effort low`
+> **Warning:** the shortcut intentionally bypasses Claude Code's safety
+> confirmations (`--dangerously-skip-permissions`). Only use it in environments
+> where you accept that.
 
 ## Install
 
-Copy `scripts/*` into `%USERPROFILE%\` and `shortcuts/*` onto your Desktop.
+From a **normal PowerShell window** (see [the container gotcha](#the-container-gotcha)):
+
+```powershell
+git clone https://github.com/Turboaitech/yolo-bash.git
+cd yolo-bash
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+The installer:
+
+1. Resolves `claude.exe` to a real, non-virtualized path — reusing a copy already
+   on disk if it finds one, and only downloading the native installer as a last
+   resort.
+2. Puts it in `%USERPROFILE%\.local\bin`.
+3. Generates `Claude Code.lnk` on your Desktop with the correct absolute path for
+   *your* machine, pointing straight at `claude.exe`.
+4. Adds `%USERPROFILE%\.local\bin` to your user PATH.
+
+Flags: `-SkipPathUpdate` leaves PATH alone, `-Force` re-copies `claude.exe` even if
+one is already installed.
+
+## The container gotcha
+
+**Do not `npm install -g @anthropic-ai/claude-code` from a terminal inside the
+Claude desktop app.**
+
+That app runs in an MSIX container. Writes to `%APPDATA%` from inside it are
+silently redirected:
+
+```
+C:\Users\<you>\AppData\Roaming\npm
+  -> C:\Users\<you>\AppData\Local\Packages\Claude_<id>\LocalCache\Roaming\npm
+```
+
+Inside the app everything looks perfectly installed — `claude --version` works,
+`where claude` finds it. But Explorer, Task Scheduler, and ordinary terminals run
+*outside* the container and see nothing there. A shortcut built against those paths
+dies with `The system cannot find the path specified.`
+
+An `nvm4w` layout makes it worse, because `C:\nvm4w\nodejs` is a junction pointing
+at `AppData\Roaming\npm` — so the shortcut target *resolves*, to an empty directory.
+
+Symptoms and how to tell them apart:
+
+| Symptom | Cause |
+| --- | --- |
+| Shortcut flashes and closes, "path not found" | CLI only exists inside the container |
+| `where claude` works in the app, fails elsewhere | same |
+| `gh auth status` logged in one place, logged out in another | `hosts.yml` written to the redirected `%APPDATA%` |
+
+To confirm from inside the app, run something through Task Scheduler — it executes
+outside the container and sees the real filesystem:
+
+```powershell
+schtasks /create /tn Probe /tr "cmd /c where claude > %USERPROFILE%\probe.txt 2>&1" /sc once /st 23:59 /f
+schtasks /run /tn Probe
+# then read %USERPROFILE%\probe.txt and: schtasks /delete /tn Probe /f
+```
+
+`install.ps1` detects the container, warns, and installs to `%USERPROFILE%\.local\bin`,
+which is **not** virtualized.
+
+## Notes
+
+The old `.vbs` wrappers and prebuilt `.lnk` files were removed. The VBS existed to
+avoid a stray parent console window, which a shortcut pointing straight at
+`claude.exe` doesn't have; the `.lnk` binaries had one machine's absolute paths
+baked in, which is what broke them in the first place. `install.ps1` generates the
+shortcut correctly instead.
