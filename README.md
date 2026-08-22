@@ -1,13 +1,15 @@
 # yolo-claude
 
-Windows desktop shortcuts that launch AI coding CLIs in "YOLO" mode — permission
-prompts and approval gates disabled.
+A Windows desktop shortcut that launches Claude Code in "YOLO" mode — permission
+prompts disabled.
 
-> **Warning:** every shortcut here intentionally bypasses the safety confirmations
-> of its tool. File writes, shell commands, and network calls all run unattended.
-> Only point them at a working directory you accept an agent modifying without asking.
+> **Warning:** the shortcut intentionally bypasses Claude Code's safety
+> confirmations (`--dangerously-skip-permissions`). Only use it in environments
+> where you accept that.
 
-## Quick install
+## Install
+
+From a **normal PowerShell window** (see [the container gotcha](#the-container-gotcha)):
 
 ```powershell
 git clone https://github.com/Turboaitech/yolo-claude.git
@@ -15,84 +17,101 @@ cd yolo-claude
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-A `yolo-claude` shortcut appears on your desktop, wearing the Claude logo instead
-of the default executable icon.
+The installer:
 
-`-ExecutionPolicy Bypass` is there because a default Windows install refuses to run
-local scripts. To lift that permanently: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`.
+1. Resolves `claude.exe` to a real, non-virtualized path — reusing a copy already
+   on disk if it finds one, and only downloading the native installer as a last
+   resort.
+2. Puts it in `%USERPROFILE%\.local\bin`.
+3. Builds a proper multi-resolution `claude.ico` (16 → 256 px) for the shortcut.
+4. Generates `yolo-claude.lnk` on your Desktop with the correct absolute path for
+   *your* machine, pointing straight at `claude.exe`.
+5. Adds `%USERPROFILE%\.local\bin` to your user PATH.
 
-### What `install.ps1` does
+Flags: `-SkipPathUpdate` leaves PATH alone, `-Force` re-copies `claude.exe` even if
+one is already installed, `-Name "something"` renames the shortcut.
 
-- Copies `icons/claude-logo.ico` to `~/.claude/claude-logo.ico` — outside the Claude
-  Code install tree, so an update can't wipe it.
-- Creates `yolo-claude.lnk` on the desktop targeting `claude.exe`
-  with `--dangerously-skip-permissions`, starting in your home directory.
-- Refreshes the Explorer icon cache so the logo shows without a sign-out.
+## The container gotcha
 
-`claude.exe` is auto-detected from `~/.local/bin`, `%LOCALAPPDATA%\Programs\claude`,
-the npm global bin, then `PATH`. The OneDrive-redirected Desktop is preferred when
-it exists.
+**Do not `npm install -g @anthropic-ai/claude-code` from a terminal inside the
+Claude desktop app.**
 
-### Options
+That app runs in an MSIX container. Writes to `%APPDATA%` from inside it are
+silently redirected:
 
-```powershell
-.\install.ps1 -Name "yolo"                      # different shortcut name
-.\install.ps1 -ClaudePath "D:\tools\claude.exe" # explicit binary
-.\install.ps1 -Arguments ""                     # no flags, normal Claude Code
-.\install.ps1 -WorkingDirectory "C:\code"       # start somewhere else
+```
+C:\Users\<you>\AppData\Roaming\npm
+  -> C:\Users\<you>\AppData\Local\Packages\Claude_<id>\LocalCache\Roaming\npm
 ```
 
-### Uninstall
+Inside the app everything looks perfectly installed — `claude --version` works,
+`where claude` finds it. But Explorer, Task Scheduler, and ordinary terminals run
+*outside* the container and see nothing there. A shortcut built against those paths
+dies with `The system cannot find the path specified.`
+
+An `nvm4w` layout makes it worse, because `C:\nvm4w\nodejs` is a junction pointing
+at `AppData\Roaming\npm` — so the shortcut target *resolves*, to an empty directory.
+
+Symptoms and how to tell them apart:
+
+| Symptom | Cause |
+| --- | --- |
+| Shortcut flashes and closes, "path not found" | CLI only exists inside the container |
+| `where claude` works in the app, fails elsewhere | same |
+| `gh auth status` logged in one place, logged out in another | `hosts.yml` written to the redirected `%APPDATA%` |
+
+To confirm from inside the app, run something through Task Scheduler — it executes
+outside the container and sees the real filesystem:
 
 ```powershell
-Remove-Item "$([Environment]::GetFolderPath('Desktop'))\yolo-claude.lnk"
-Remove-Item "$HOME\.claude\claude-logo.ico"
+schtasks /create /tn Probe /tr "cmd /c where claude > %USERPROFILE%\probe.txt 2>&1" /sc once /st 23:59 /f
+schtasks /run /tn Probe
+# then read %USERPROFILE%\probe.txt and: schtasks /delete /tn Probe /f
 ```
 
-## `shortcuts/`
+`install.ps1` detects the container, warns, and installs to `%USERPROFILE%\.local\bin`,
+which is **not** virtualized.
 
-Prebuilt `.lnk` files for the other launchers. `install.ps1` covers the plain
-Claude Code one and is the better path; these are here for the variants it doesn't
-generate yet.
+## The icon
 
-| Shortcut | Launches | Flags |
-| --- | --- | --- |
-| `Claude Code.lnk` | `wscript` → `scripts/claude-launch.vbs` → `claude.cmd` | `--dangerously-skip-permissions` |
-| `Qwen 3.8 Claude Code.lnk` | `wscript` → `scripts/qwen38-claude-launch.vbs` → `scripts/qwen38-claude-code.cmd` | Claude Code pointed at local Ollama, `--dangerously-skip-permissions` |
-| `Codex.lnk` | `cmd /d /k codex.cmd` | `--dangerously-bypass-approvals-and-sandbox` |
+`claude.exe` embeds the Claude logo, but only at 32×32 — fine in the taskbar, soft
+at large desktop icon sizes. If the Claude desktop app is installed, the installer
+finds the 300×300 logo in its MSIX package and rebuilds it into a real
+multi-resolution `.ico` (16, 24, 32, 48, 64, 128, 256 px, 32-bit with alpha),
+written to `%USERPROFILE%\.local\bin\claude.ico`.
 
-These `.lnk` files are Windows binaries with absolute paths baked in. They assume:
+It's written next to `claude.exe` rather than referenced in place because the
+`WindowsApps` path carries a version number that changes on every app update,
+which would silently break the shortcut's icon.
 
-- `C:\Users\boisg\` as the home / working directory
-- Node installed via nvm4w at `C:\nvm4w\nodejs\` (`claude.cmd`, `codex.cmd`)
-- the `.vbs` / `.cmd` files from `scripts/` sitting in `C:\Users\boisg\`
+If the desktop app isn't installed, the installer falls back to
+`icons/claude-logo.ico`, committed here at nine sizes (16 → 256 px) with a
+transparent background. That file comes from
+[seeklogo](https://seeklogo.com/vector-logo/554534/claude); the source PNG has an
+opaque white background, so `scripts/make-icon.ps1` recovers a real alpha channel
+from the white/orange blend rather than colour-keying it, which is what keeps the
+burst's anti-aliased edges from carrying a white fringe on dark taskbars. Run that
+script only if you want to rebuild the `.ico` from different artwork — installing
+doesn't need it.
 
-On a different machine, copy `scripts/*` into `%USERPROFILE%\` and either re-create
-these shortcuts or edit their targets to match your paths. This is exactly the
-brittleness `install.ps1` exists to avoid — it resolves paths at install time
-instead of baking them in.
+Last resort, if both are unavailable: the 32×32 icon inside `claude.exe`.
 
 ## `scripts/`
 
-- `claude-launch.vbs` — one-liner that opens a `cmd /k` window running Claude Code.
-  The VBS wrapper exists so the shortcut spawns a real console without a stray
-  parent window.
-- `qwen38-claude-launch.vbs` — same trick, but runs `qwen38-claude-code.cmd`.
-- `qwen38-claude-code.cmd` — points Claude Code at a **local** model:
-  - `ANTHROPIC_BASE_URL=http://127.0.0.1:11434` (Ollama), auth token `ollama`
-  - clears `ANTHROPIC_API_KEY` so nothing leaks to the real API
-  - `MAX_THINKING_TOKENS=0` plus telemetry/error-reporting off
-  - starts `ollama serve` if `/api/version` doesn't answer within 3s
-  - runs `--model qwen3.8-claude-nothink --effort low`
-- `make-icon.ps1` — rebuilds `icons/claude-logo.ico` from a source PNG. Not needed
-  to install; the `.ico` is committed.
+`qwen38-claude-code.cmd` points Claude Code at a **local** model instead of the API:
 
-## `icons/`
+- `ANTHROPIC_BASE_URL=http://127.0.0.1:11434` (Ollama), auth token `ollama`
+- clears `ANTHROPIC_API_KEY` so nothing leaks to the real API
+- `MAX_THINKING_TOKENS=0` plus telemetry/error-reporting off
+- starts `ollama serve` if `/api/version` doesn't answer within 3s
+- runs `--model qwen3.8-claude-nothink --effort low`
 
-`claude-logo.ico` — the Claude burst at nine sizes (256→16px) with a transparent
-background, so Windows never has to rescale.
+Run it directly; `install.ps1` doesn't generate a shortcut for it.
 
-Sourced from [seeklogo](https://seeklogo.com/vector-logo/554534/claude). The original
-PNG has an opaque white background; `make-icon.ps1` recovers a real alpha channel
-from the white/orange blend rather than colour-keying it, which is what keeps the
-burst's anti-aliased edges from carrying a white fringe on dark taskbars.
+## Notes
+
+The old `.vbs` wrappers and prebuilt `.lnk` files were removed. The VBS existed to
+avoid a stray parent console window, which a shortcut pointing straight at
+`claude.exe` doesn't have; the `.lnk` binaries had one machine's absolute paths
+baked in, which is what broke them in the first place. `install.ps1` generates the
+shortcut correctly instead.
