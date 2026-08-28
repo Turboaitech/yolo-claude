@@ -5,7 +5,8 @@ prompts disabled.
 
 > **Warning:** the shortcut intentionally bypasses Claude Code's safety
 > confirmations (`--dangerously-skip-permissions`). Only use it in environments
-> where you accept that.
+> where you accept that. To keep that bounded to the machine you are sitting at,
+> the installer also [disables Remote Control, Workflows and cron routines](#the-lockdown).
 
 ## Install
 
@@ -24,12 +25,44 @@ The installer:
    resort.
 2. Puts it in `%USERPROFILE%\.local\bin`.
 3. Builds a proper multi-resolution `claude.ico` (16 → 256 px) for the shortcut.
-4. Generates `yolo-claude.lnk` on your Desktop with the correct absolute path for
+4. [Locks down the remote and unattended features](#the-lockdown) in
+   `~\.claude\settings.json`.
+5. Generates `yolo-claude.lnk` on your Desktop with the correct absolute path for
    *your* machine, pointing straight at `claude.exe`.
-5. Adds `%USERPROFILE%\.local\bin` to your user PATH.
+6. Adds `%USERPROFILE%\.local\bin` to your user PATH.
 
-Flags: `-SkipPathUpdate` leaves PATH alone, `-Force` re-copies `claude.exe` even if
-one is already installed, `-Name "something"` renames the shortcut.
+Flags: `-SkipPathUpdate` leaves PATH alone, `-SkipLockdown` leaves settings alone,
+`-Force` re-copies `claude.exe` even if one is already installed, `-Name "something"`
+renames the shortcut.
+
+## The lockdown
+
+YOLO mode is a reasonable trade *when you are sitting at the machine*. Three
+features break that assumption, because they let work start without you at the
+keyboard — and under this shortcut it starts with every permission prompt already
+suppressed. So the installer turns them off:
+
+| Setting | Turns off |
+| --- | --- |
+| `disableRemoteControl` | `claude.ai/code` takeover, `claude remote-control`, `--remote-control` / `--rc`, auto-start, and the in-session toggle |
+| `disableWorkflows` | Workflows — multi-agent orchestration that fans out unattended |
+| `env.CLAUDE_CODE_DISABLE_CRON` | scheduled cloud routines |
+
+Remote Control is the one that actually matters: with it on, anything typed into a
+phone or a browser tab executes on this machine unconfirmed.
+
+Your existing `settings.json` is **merged**, not overwritten, and copied to
+`settings.json.bak-<timestamp>` before any change. Re-running the installer when
+all three are already set writes nothing. Restart any running Claude Code session
+afterwards — settings are read at startup.
+
+To undo, delete those keys from `~\.claude\settings.json`, or install with
+`-SkipLockdown` to never write them.
+
+**One gap, stated plainly:** background agents (`claude --bg`, `claude agents`)
+have no supported off switch. `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` is *not* it —
+that disables backgrounded shell commands, which long-running jobs depend on — so
+the installer does not set it. Just don't pass `--bg`.
 
 ## The container gotcha
 

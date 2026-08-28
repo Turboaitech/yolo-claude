@@ -9,8 +9,16 @@
     Run this from a NORMAL PowerShell window, not from a terminal inside the Claude
     desktop app -- see the container note below and in README.md.
 
+    Because the shortcut runs Claude Code with permission prompts off, the installer
+    also turns off Remote Control, Workflows and scheduled cloud routines in the user
+    settings -- see the lockdown note below. Pass -SkipLockdown to opt out.
+
 .PARAMETER SkipPathUpdate
     Do not add ~\.local\bin to the user PATH.
+
+.PARAMETER SkipLockdown
+    Do not touch ~\.claude\settings.json. Leaves Remote Control, Workflows and
+    scheduled cloud routines at whatever they already are.
 
 .PARAMETER Force
     Overwrite an existing claude.exe in ~\.local\bin instead of keeping it.
@@ -21,6 +29,7 @@
 [CmdletBinding()]
 param(
     [switch]$SkipPathUpdate,
+    [switch]$SkipLockdown,
     [switch]$Force,
     [string]$Name = 'yolo-claude'
 )
@@ -221,6 +230,77 @@ function New-IcoFile {
 }
 
 # --------------------------------------------------------------------------
+# Lockdown
+#
+# The shortcut launches Claude Code with --dangerously-skip-permissions, so
+# nothing it runs asks for confirmation. Two features turn that from "risky on
+# a machine I am sitting at" into "risky from anywhere":
+#
+#   Remote Control  claude.ai/code takeover, `claude remote-control`,
+#                   --remote-control / --rc, auto-start, and the in-session
+#                   toggle. Paired with YOLO mode, anything sent from a phone
+#                   or a browser tab executes here unconfirmed.
+#   Workflows/cron  multi-agent orchestration and scheduled cloud routines,
+#                   which fan out unattended work under those same permissions.
+#
+# So we merge three keys into the user settings. Existing settings are kept and
+# a timestamped backup is written first. -SkipLockdown opts out.
+#
+# There is deliberately no switch here for `--bg` background agents: Claude Code
+# ships none. CLAUDE_CODE_DISABLE_BACKGROUND_TASKS is a different feature -- it
+# kills backgrounded shell commands, which long-running jobs rely on -- so
+# setting it would break more than it protects.
+# --------------------------------------------------------------------------
+function Set-ClaudeLockdown {
+    param([Parameter(Mandatory)][string]$SettingsPath)
+
+    New-Item -ItemType Directory -Path (Split-Path -Parent $SettingsPath) -Force | Out-Null
+
+    $settings = $null
+    if (Test-Path -LiteralPath $SettingsPath) {
+        $raw = Get-Content -LiteralPath $SettingsPath -Raw -ErrorAction Stop
+        if (-not [string]::IsNullOrWhiteSpace($raw)) {
+            try { $settings = $raw | ConvertFrom-Json -ErrorAction Stop }
+            catch { throw "existing settings.json is not valid JSON -- fix or move it first" }
+        }
+    }
+    if (-not $settings) { $settings = New-Object psobject }
+
+    $changed = $false
+
+    foreach ($key in @('disableRemoteControl', 'disableWorkflows')) {
+        if ($settings.PSObject.Properties[$key] -and $settings.$key -eq $true) { continue }
+        $settings | Add-Member -NotePropertyName $key -NotePropertyValue $true -Force
+        $changed = $true
+    }
+
+    if (-not $settings.PSObject.Properties['env'] -or $null -eq $settings.env) {
+        $settings | Add-Member -NotePropertyName 'env' -NotePropertyValue (New-Object psobject) -Force
+        $changed = $true
+    }
+    if ($settings.env.CLAUDE_CODE_DISABLE_CRON -ne '1') {
+        $settings.env | Add-Member -NotePropertyName 'CLAUDE_CODE_DISABLE_CRON' -NotePropertyValue '1' -Force
+        $changed = $true
+    }
+
+    if (-not $changed) { return $null }
+
+    $backup = $null
+    if (Test-Path -LiteralPath $SettingsPath) {
+        $backup = "$SettingsPath.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+        Copy-Item -LiteralPath $SettingsPath -Destination $backup -Force
+    }
+
+    # -Depth is well past anything that lives in settings.json (hooks, permissions,
+    # autoMode); the PS 5.1 default of 2 would flatten those into literal strings.
+    # WriteAllText with a BOM-less UTF8Encoding because Set-Content/Out-File here
+    # emit a BOM, which not every JSON reader tolerates.
+    $json = $settings | ConvertTo-Json -Depth 32
+    [System.IO.File]::WriteAllText($SettingsPath, $json, (New-Object System.Text.UTF8Encoding($false)))
+    return @{ Backup = $backup }
+}
+
+# --------------------------------------------------------------------------
 
 Write-Host ''
 Write-Host 'yolo-claude installer' -ForegroundColor White
@@ -283,6 +363,27 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 Write-Ok "verified: $ver"
+
+if ($SkipLockdown) {
+    Write-Step 'Hardening Claude Code settings'
+    Write-Warn '-SkipLockdown: Remote Control and Workflows left as-is'
+    Write-Warn 'a YOLO shortcut plus Remote Control means remote input runs here unconfirmed'
+} else {
+    Write-Step 'Hardening Claude Code settings'
+    $settingsPath = Join-Path $env:USERPROFILE '.claude\settings.json'
+    try {
+        $lock = Set-ClaudeLockdown -SettingsPath $settingsPath
+        if ($null -eq $lock) {
+            Write-Ok 'already set: Remote Control off, Workflows off, cron routines off'
+        } else {
+            Write-Ok 'Remote Control off, Workflows off, cron routines off'
+            if ($lock.Backup) { Write-Ok "backed up to $(Split-Path -Leaf $lock.Backup)" }
+            Write-Warn 'restart any running Claude Code session to pick this up'
+        }
+    } catch {
+        Write-Warn "left $settingsPath alone: $($_.Exception.Message)"
+    }
+}
 
 Write-Step 'Preparing icon'
 $icoPath = Join-Path $BinDir 'claude.ico'
