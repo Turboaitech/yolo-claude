@@ -1,6 +1,7 @@
 # Source artwork used only to regenerate the icon
 *.png
 !docs/*.png
+!icons/*.png
 
 # Windows
 Thumbs.db

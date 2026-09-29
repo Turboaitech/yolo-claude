@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=yolo-ab-glm
+Comment=Claude Code in YOLO mode on local abliterated GLM-5.3 Flash EXL3 K3.25 (vLLM :8001)
+Exec=gnome-terminal --title=yolo-ab-glm --working-directory=/home/bo -- /home/bo/.local/bin/yolo-ab-glm
+Path=/home/bo
+Icon=/home/bo/.local/share/icons/glm-pink.png
+Terminal=false
+Categories=Development;

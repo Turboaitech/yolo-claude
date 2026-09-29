@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=yolo-codex
+Comment=Launch Codex in YOLO mode (skip approvals and sandbox)
+Exec=gnome-terminal --working-directory=/home/bo -- /home/bo/.local/bin/codex --dangerously-bypass-approvals-and-sandbox
+Path=/home/bo
+Icon=/home/bo/.local/share/icons/chatgpt.png
+Terminal=false
+Categories=Development;
