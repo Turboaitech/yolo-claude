@@ -5,9 +5,9 @@ prompts disabled. Organized by platform:
 
 | Folder | What's there |
 | --- | --- |
-| [`windows/`](windows/) | `install.ps1` (shortcut + icon + settings lockdown), `claude-usage.bat`, local-model launcher, icon tools |
-| [`linux/`](linux/) | `.desktop` launchers for GNOME (`yolo-codex`, `yolo-ab-glm`) and their icons |
-| [`mac/`](mac/) | nothing yet |
+| [`windows/`](windows/) | `install.ps1` → `yolo-claude.lnk` + `claude-usage.lnk` (battery icon), plain `.bat` equivalents, local-model launcher, icon tools |
+| [`linux/`](linux/) | `yolo-claude.desktop` + `claude-usage.desktop` via `install.sh`, plus `yolo-codex` / `yolo-ab-glm` |
+| [`mac/`](mac/) | `yolo-claude.command` + `claude-usage.command` via `install.sh` (sets Finder icons) |
 
 > **Warning:** these launchers intentionally bypass safety confirmations
 > (`--dangerously-skip-permissions` and equivalents). Only use them on a machine

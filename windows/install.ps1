@@ -431,6 +431,23 @@ $sc.WindowStyle      = 1
 $sc.Save()
 Write-Ok "$Name.lnk"
 
+# Companion shortcut that opens straight into /usage, with the battery icon.
+$usageIcon = $iconLocation
+$bundledUsage = Join-Path $RepoDir 'icons\claude-usage.ico'
+if (Test-Path -LiteralPath $bundledUsage) {
+    Copy-Item -LiteralPath $bundledUsage -Destination (Join-Path $BinDir 'claude-usage.ico') -Force
+    $usageIcon = "$(Join-Path $BinDir 'claude-usage.ico'),0"
+}
+$sc = $shell.CreateShortcut((Join-Path $Desktop 'claude-usage.lnk'))
+$sc.TargetPath       = $claude
+$sc.Arguments        = '--dangerously-skip-permissions "/usage"'
+$sc.WorkingDirectory = $env:USERPROFILE
+$sc.IconLocation     = $usageIcon
+$sc.Description      = 'Open Claude Code on /usage (plan limits)'
+$sc.WindowStyle      = 1
+$sc.Save()
+Write-Ok 'claude-usage.lnk'
+
 # Nudge Explorer so a changed icon shows without a sign-out.
 try { ie4uinit.exe -show } catch { }
 

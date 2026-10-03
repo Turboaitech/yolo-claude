@@ -28,7 +28,9 @@ The installer:
 4. [Locks down the remote and unattended features](#the-lockdown) in
    `~\.claude\settings.json`.
 5. Generates `yolo-claude.lnk` on your Desktop with the correct absolute path for
-   *your* machine, pointing straight at `claude.exe`.
+   *your* machine, pointing straight at `claude.exe` — plus `claude-usage.lnk`,
+   which opens on `/usage` and wears `icons\claude-usage.ico` (the Claude burst
+   in a battery).
 6. Adds `%USERPROFILE%\.local\bin` to your user PATH.
 
 Flags: `-SkipPathUpdate` leaves PATH alone, `-SkipLockdown` leaves settings alone,
@@ -141,18 +143,17 @@ Last resort, if both are unavailable: the 32×32 icon inside `claude.exe`.
 
 Run it directly; `install.ps1` doesn't generate a shortcut for it.
 
-`claude-usage.bat` opens Claude Code straight into `/usage` to check plan limits.
-A `.bat` can't carry an icon, so for a Desktop entry make a shortcut instead, using
-`icons\claude-usage.ico` (the Claude burst in a battery, built by
-`scripts\make-usage-icon.ps1`):
+`make-usage-icon.ps1` rebuilds `icons\claude-usage.ico` from `claude-logo.ico`
+(`-Charge 0.4` changes how full the battery looks).
 
-```powershell
-$bin = "$env:USERPROFILE\.local\bin"
-Copy-Item .\icons\claude-usage.ico $bin
-$s = (New-Object -ComObject WScript.Shell).CreateShortcut("$env:USERPROFILE\Desktop\claude-usage.lnk")
-$s.TargetPath = "$bin\claude.exe"; $s.Arguments = '--dangerously-skip-permissions "/usage"'
-$s.WorkingDirectory = $env:USERPROFILE; $s.IconLocation = "$bin\claude-usage.ico,0"; $s.Save()
-```
+## Plain launchers
+
+`yolo-claude.bat` and `claude-usage.bat` do the same as the two shortcuts without
+running the installer. A `.bat` can't carry an icon, which is why the installer
+makes `.lnk` files instead.
+
+If a shortcut still shows an old icon, Explorer's cache is stale: run
+`ie4uinit.exe -show`.
 
 ## Notes
 

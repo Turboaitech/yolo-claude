@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=yolo-claude
+Comment=Launch Claude Code in YOLO mode (skip permission prompts)
+Exec=gnome-terminal --title=yolo-claude -- bash -lc "cd ~ && exec claude --dangerously-skip-permissions"
+Icon=claude
+Terminal=false
+Categories=Development;

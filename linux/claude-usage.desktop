@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=claude-usage
+Comment=Open Claude Code on /usage (plan limits)
+Exec=gnome-terminal --title=claude-usage -- bash -lc "cd ~ && exec claude --dangerously-skip-permissions /usage"
+Icon=claude-usage
+Terminal=false
+Categories=Development;
