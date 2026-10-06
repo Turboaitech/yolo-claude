@@ -30,7 +30,9 @@ The installer:
 5. Generates `yolo-claude.lnk` on your Desktop with the correct absolute path for
    *your* machine, pointing straight at `claude.exe` — plus `claude-usage.lnk`,
    which opens on `/usage` and wears `icons\claude-usage.ico` (the Claude burst
-   in a battery).
+   in a battery). If `codex` is on PATH it also makes `yolo-codex.lnk`
+   (`--dangerously-bypass-approvals-and-sandbox`) with `icons\chatgpt.ico`, the
+   white-on-black ChatGPT mark; without Codex installed that one is skipped.
 6. Adds `%USERPROFILE%\.local\bin` to your user PATH.
 
 Flags: `-SkipPathUpdate` leaves PATH alone, `-SkipLockdown` leaves settings alone,
@@ -148,8 +150,8 @@ Run it directly; `install.ps1` doesn't generate a shortcut for it.
 
 ## Plain launchers
 
-`yolo-claude.bat` and `claude-usage.bat` do the same as the two shortcuts without
-running the installer. A `.bat` can't carry an icon, which is why the installer
+`yolo-claude.bat`, `claude-usage.bat` and `yolo-codex.bat` do the same as the
+shortcuts without running the installer. A `.bat` can't carry an icon, which is why the installer
 makes `.lnk` files instead.
 
 If a shortcut still shows an old icon, Explorer's cache is stale: run

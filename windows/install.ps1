@@ -106,6 +106,19 @@ function Find-RealClaudeExe {
     return $null
 }
 
+# Codex is optional. npm installs it as codex.cmd, winget as codex.exe; take
+# whichever comes first on PATH so the shortcut runs what typing `codex` runs.
+function Find-RealCodex {
+    $where = & where.exe codex 2>$null
+    if ($LASTEXITCODE -eq 0 -and $where) {
+        foreach ($p in $where) {
+            if ($p -notmatch '\.(cmd|exe)$') { continue }
+            if ((Test-Path -LiteralPath $p) -and -not (Test-VirtualizedPath $p)) { return $p }
+        }
+    }
+    return $null
+}
+
 # Find a copy stashed inside an MSIX container, so we can reuse the ~340 MB that
 # is already on disk instead of re-downloading it.
 function Find-ContainerClaude {
@@ -447,6 +460,29 @@ $sc.Description      = 'Open Claude Code on /usage (plan limits)'
 $sc.WindowStyle      = 1
 $sc.Save()
 Write-Ok 'claude-usage.lnk'
+
+# Same idea for Codex, when it is installed. Its flag drops the sandbox as well
+# as the approval prompts.
+$codex = Find-RealCodex
+if ($codex) {
+    $codexIcon = "$codex,0"
+    $bundledCodex = Join-Path $RepoDir 'icons\chatgpt.ico'
+    if (Test-Path -LiteralPath $bundledCodex) {
+        Copy-Item -LiteralPath $bundledCodex -Destination (Join-Path $BinDir 'chatgpt.ico') -Force
+        $codexIcon = "$(Join-Path $BinDir 'chatgpt.ico'),0"
+    }
+    $sc = $shell.CreateShortcut((Join-Path $Desktop 'yolo-codex.lnk'))
+    $sc.TargetPath       = $codex
+    $sc.Arguments        = '--dangerously-bypass-approvals-and-sandbox'
+    $sc.WorkingDirectory = $env:USERPROFILE
+    $sc.IconLocation     = $codexIcon
+    $sc.Description      = 'Launch Codex CLI in YOLO mode (skip approvals and sandbox)'
+    $sc.WindowStyle      = 1
+    $sc.Save()
+    Write-Ok "yolo-codex.lnk -> $codex"
+} else {
+    Write-Warn 'codex not on PATH; skipped yolo-codex.lnk (npm install -g @openai/codex, then re-run)'
+}
 
 # Nudge Explorer so a changed icon shows without a sign-out.
 try { ie4uinit.exe -show } catch { }
