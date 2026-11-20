@@ -10,3 +10,6 @@ desktop.ini
 # Editors
 .vscode/
 .idea/
+
+# Local launcher settings (hosts, API keys)
+*.env.cmd

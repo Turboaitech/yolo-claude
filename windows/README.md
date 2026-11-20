@@ -145,6 +145,38 @@ Last resort, if both are unavailable: the 32×32 icon inside `claude.exe`.
 
 Run it directly; `install.ps1` doesn't generate a shortcut for it.
 
+## Home-server launchers: `yolo-spark.cmd` and `yolo-6000.cmd`
+
+Two launchers that point Claude Code at a model served on your own hardware instead of the API:
+
+| Launcher | Server | Icon |
+| --- | --- | --- |
+| `yolo-spark.cmd` | a DGX Spark serving an Anthropic-compatible API (e.g. TensorFold) | `icons\spark.ico` |
+| `yolo-6000.cmd` | a 2x RTX PRO 6000 box behind an Anthropic-compatible gateway with an API key | `icons\rtx6000.ico` |
+
+Neither hardcodes an address, key or model. Each one reads a local settings file that you create
+and that never goes into git (`*.env.cmd` is ignored):
+
+```bat
+rem %USERPROFILE%\.local\bin\yolo-spark.env.cmd
+set "YOLO_SPARK_HOSTS=100.x.y.z 192.168.1.9"
+set "YOLO_SPARK_PORT=8888"
+
+rem %USERPROFILE%\.local\bin\yolo-6000.env.cmd
+set "YOLO_6000_HOSTS=6000.local 192.168.1.50"
+set "YOLO_6000_PORT=8899"
+set "YOLO_6000_KEY=sk-..."
+set "YOLO_6000_CTX=131072"
+```
+
+Hosts are tried in order, so you can list the tailnet address first and the LAN address second.
+On every launch the model id comes from `/v1/models` (the 6000 launcher skips `+web` variants), so
+switching what the server runs needs no edit here. Then Claude Code starts with
+`--effort low --dangerously-skip-permissions`, thinking off, and telemetry off.
+
+To get a desktop shortcut, copy the `.cmd` and its `.ico` into `%USERPROFILE%\.local\bin`, then point
+a shortcut at `cmd.exe /k "%USERPROFILE%\.local\bin\yolo-6000.cmd"` with that icon.
+
 `make-usage-icon.ps1` rebuilds `icons\claude-usage.ico` from `claude-logo.ico`
 (`-Charge 0.4` changes how full the battery looks).
 
